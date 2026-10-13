@@ -171,6 +171,8 @@ function trimWiktionary(word, data) {
     const pos = section.partOfSpeech.toLowerCase(); // "Noun" -> "noun", to match the other source
     for (const def of section.definitions ?? []) {
       const body = parseHtml(def.definition);
+      // "This term needs a definition…" is a placeholder for editors, not a meaning.
+      if (body.querySelector('a[title="Template:rfdef"]')) continue;
       const found = readForms(body, pos);
       forms.push(...found);
       // A line that's nothing but "plural of fox" is replaced by following the link.
