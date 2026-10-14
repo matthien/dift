@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "dift",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Highlight a word, press a shortcut, and see its definition right next to it.",
 
   "browser_specific_settings": {
@@ -19,7 +19,7 @@
   },
 
   "permissions": ["activeTab", "scripting"],
-  "host_permissions": ["https://en.wiktionary.org/*", "https://api.dictionaryapi.dev/*"],
+  "host_permissions": ["https://en.wiktionary.org/*"],
 
   "commands": {
     "define-selection": {

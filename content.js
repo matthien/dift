@@ -150,7 +150,7 @@ if (!window.diftShow) {
       parts.push(...renderMeanings(form.meanings));
     }
 
-    // Footer: where each part came from, e.g. "Definitions: Wiktionary · Audio: dictionaryapi.dev"
+    // Footer: where each part came from, e.g. "Definitions: Wiktionary"
     const footer = el("div", "sources");
     entry.sources.forEach((source, i) => {
       if (i > 0) footer.append(" · ");

@@ -1,8 +1,7 @@
 // Background script: runs inside the extension, outside any web page.
-// Jobs: react to the shortcut, talk to the dictionary APIs, play audio.
+// Jobs: react to the shortcut, talk to Wiktionary, play audio.
 
 const WIKTIONARY_API = "https://en.wiktionary.org/api/rest_v1/page/definition/";
-const DICTIONARY_API = "https://api.dictionaryapi.dev/api/v2/entries/en/";
 const TIMEOUT_MS = 5000; // a service that hasn't answered by now counts as down
 
 // --- 1. Shortcut pressed -> put the content script into the current tab ---
@@ -40,9 +39,9 @@ browser.runtime.onMessage.addListener((message) => {
   }
 });
 
-// --- 3. Lookup: ask both dictionaries at once, then combine ---
+// --- 3. Lookup: ask Wiktionary, then follow base words ---
 //
-// Every lookup function returns either
+// lookupWiktionary returns either
 //   { ok: true, entry: { word, audio, meanings, forms } }   or   { ok: false, error: "not-found" | "network" }
 // lookup() replies with the same shape plus:
 //   entry.notes   e.g. ["plural of leaf", "plural of leave"]  (shown under the title)
@@ -60,48 +59,20 @@ async function lookup(word, sentenceStart) {
     : sentenceStart ? [lower, word]
     : [word, lower];
 
-  // Start dictionaryapi.dev now, but don't wait for it yet: it can be slow, and the
-  // base-word lookups below only need Wiktionary's answer.
-  const dictPromise = lookupDictionaryApi(lower);
   const wikis = await Promise.all(spellings.map(lookupWiktionary));
 
   // First spelling (in preference order) that Wiktionary has.
   const found = wikis.findIndex((result) => result.ok);
-  const wiki = found >= 0 ? wikis[found]
-    : { ok: false, error: wikis.some((r) => r.error === "not-found") ? "not-found" : "network" };
-
-  // "foxes" -> "plural of fox": look up the base words (all at once), alongside dictionaryapi.dev.
-  const [dict] = await Promise.all([dictPromise, wiki.ok && addBaseWords(wiki.entry, spellings)]);
-
-  // Wiktionary has it: its definitions, plus dictionaryapi.dev's audio if available.
-  if (wiki.ok) {
-    const spelling = spellings[found];
-    const entry = wiki.entry;
-    entry.sources = [{ label: "Definitions", name: "Wiktionary", url: wiktionaryPage(spelling) }];
-    // dictionaryapi.dev only knows lowercase words. Pairs like "Polish"/"polish" are
-    // pronounced differently, so only borrow its audio for the same word.
-    const sameWord = spelling === lower || dict.entry?.word === spelling;
-    if (dict.ok && dict.entry.audio && sameWord) {
-      entry.audio = dict.entry.audio;
-      entry.sources.push({ label: "Audio", name: "dictionaryapi.dev", url: "https://dictionaryapi.dev" });
-    }
-    return { ok: true, entry };
+  if (found < 0) {
+    // If any spelling actually answered "not found", say so.
+    return { ok: false, error: wikis.some((r) => r.error === "not-found") ? "not-found" : "network" };
   }
 
-  // Wiktionary down or missing the word: use dictionaryapi.dev for everything.
-  if (dict.ok) {
-    const entry = dict.entry;
-    entry.sources = [{
-      label: entry.audio ? "Definitions & audio" : "Definitions",
-      name: "dictionaryapi.dev",
-      url: "https://dictionaryapi.dev",
-    }];
-    return { ok: true, entry };
-  }
-
-  // Neither has it. If at least one actually answered "not found", say so.
-  const error = wiki.error === "not-found" || dict.error === "not-found" ? "not-found" : "network";
-  return { ok: false, error };
+  // "foxes" -> "plural of fox": look up the base words (all at once).
+  const entry = wikis[found].entry;
+  await addBaseWords(entry, spellings);
+  entry.sources = [{ label: "Definitions", name: "Wiktionary", url: wiktionaryPage(spellings[found]) }];
+  return { ok: true, entry };
 }
 
 // Replace entry.forms ([{ word, note }] from trimWiktionary) with the base words'
@@ -125,7 +96,7 @@ function fetchWithTimeout(url, options = {}) {
   return fetch(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
 }
 
-// Shared by both lookups: turn the HTTP outcome into ok / not-found / network.
+// Turn the HTTP outcome into ok / not-found / network.
 async function request(url, options, trim) {
   let response;
   try {
@@ -168,7 +139,7 @@ function trimWiktionary(word, data) {
 
   for (const section of data.en ?? []) {
     if (section.language !== "English") continue;
-    const pos = section.partOfSpeech.toLowerCase(); // "Noun" -> "noun", to match the other source
+    const pos = section.partOfSpeech.toLowerCase(); // "Noun" -> "noun"
     for (const def of section.definitions ?? []) {
       const body = parseHtml(def.definition);
       // "This term needs a definition…" is a placeholder for editors, not a meaning.
@@ -244,39 +215,6 @@ function htmlToText(html) {
 // Some definitions contain nested sub-meanings; keep those on their own lines.
 function tidy(text) {
   return text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
-}
-
-// --- 3b. dictionaryapi.dev ---
-
-function lookupDictionaryApi(word) {
-  return request(DICTIONARY_API + encodeURIComponent(word), {}, (data) => trimDictionaryApi(word, data));
-}
-
-// Raw format: a list of entries, each with its own phonetics and meanings.
-function trimDictionaryApi(word, entries) {
-  let audio = null;
-  const byPartOfSpeech = new Map(); // "noun" -> [definitions...]
-
-  for (const entry of entries) {
-    // First non-empty audio link wins (many are empty strings).
-    for (const phonetic of entry.phonetics ?? []) {
-      if (!audio && phonetic.audio) audio = phonetic.audio;
-    }
-
-    // Merge meanings from every entry, grouped by part of speech.
-    for (const meaning of entry.meanings ?? []) {
-      const pos = meaning.partOfSpeech;
-      if (!byPartOfSpeech.has(pos)) byPartOfSpeech.set(pos, []);
-      for (const def of meaning.definitions ?? []) {
-        byPartOfSpeech.get(pos).push({
-          text: def.definition,
-          example: def.example ?? null,
-        });
-      }
-    }
-  }
-
-  return { word: entries[0]?.word ?? word, audio, meanings: groupedToList(byPartOfSpeech) };
 }
 
 // Map { "noun" -> [...] } -> [{ partOfSpeech: "noun", definitions: [...] }]
