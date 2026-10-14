@@ -16,6 +16,19 @@ Temporary add-ons are removed when Firefox restarts; repeat step 2 to load it ag
 
 To change the shortcut: `about:addons` → gear icon → **Manage Extension Shortcuts**.
 
+## Release a new version
+
+1. Bump `"version"` in `manifest.json` and commit.
+2. Package the committed files (`dist/` is git-ignored):
+   ```
+   git archive --format=zip -o dist/dift-<version>.zip HEAD manifest.json background.js content.js
+   ```
+3. On [addons.mozilla.org/developers](https://addons.mozilla.org/developers/) → **dift** →
+   **Upload New Version**, upload the zip. Source code: **No** (nothing is minified or bundled).
+
+Keep `browser_specific_settings.gecko.id` (`dift@local`) unchanged, or the upload counts as a
+different add-on.
+
 ## How it works
 
 ```
@@ -36,6 +49,16 @@ highlight word + press shortcut
 | `manifest.json` | Shortcut, permissions, which file is the background script |
 | `background.js` | Shortcut handling, dictionary lookups (only file that knows Wiktionary's format), audio playback |
 | `content.js` | Reads the selection, draws/positions/closes the box (inside a Shadow DOM) |
+
+The audio code (▶ button, `playAudio`) is kept but unused: Wiktionary's definition API has no
+audio, so `entry.audio` is always empty for now.
+
+## Changelog
+
+- **0.5.0**: Wiktionary only. Removed dictionaryapi.dev (it was timing out), so lookups are
+  much faster; the pronunciation button is gone with it.
+- **0.4.1**: Hide Wiktionary's "this term needs a definition" placeholders.
+- **0.4.0**: First version.
 
 ## Manual test checklist
 
