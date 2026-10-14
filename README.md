@@ -55,6 +55,7 @@ audio, so `entry.audio` is always empty for now.
 
 ## Changelog
 
+- **0.5.1**: Loading spinner in the box while a lookup is in progress.
 - **0.5.0**: Wiktionary only. Removed dictionaryapi.dev (it was timing out), so lookups are
   much faster; the pronunciation button is gone with it.
 - **0.4.1**: Hide Wiktionary's "this term needs a definition" placeholders.
