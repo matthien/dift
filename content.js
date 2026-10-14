@@ -20,7 +20,7 @@ if (!window.diftShow) {
     closeBox(); // only one box at a time
 
     const box = createBox();
-    box.append(el("div", "status", "Loading…"));
+    box.append(el("div", "status loading", "Loading…"));
     positionBox(box, anchor);
 
     const reply = await browser.runtime.sendMessage({ type: "lookup", word, sentenceStart });
@@ -271,6 +271,21 @@ if (!window.diftShow) {
     .defs li { margin-bottom: 4px; white-space: pre-line; } /* show line breaks between sub-meanings */
     .example { color: var(--muted); font-style: italic; }
     .status { color: var(--muted); }
+
+    /* Spinning ring before "Loading…". Most lookups finish in a blink, so it fades
+       in after a short delay instead of flashing on and off. */
+    .loading { display: flex; align-items: center; gap: 8px; }
+    .loading::before {
+      content: ""; width: 12px; height: 12px; flex: none;
+      border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+      opacity: 0;
+      animation: dift-spin 0.7s linear infinite, dift-appear 0.2s ease-out 0.15s forwards;
+    }
+    @keyframes dift-spin { to { transform: rotate(360deg); } }
+    @keyframes dift-appear { to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .loading::before { animation: dift-appear 0.2s ease-out 0.15s forwards; }
+    }
     .note { color: var(--muted); font-size: 13px; font-style: italic; }
 
     /* ─── leaf ───  header before each base word's meanings */
